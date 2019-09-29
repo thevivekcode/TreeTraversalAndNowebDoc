@@ -1,0 +1,377 @@
+% -*- mode:Noweb; noweb-code-mode: sml-mode -*-
+\documentclass{article}
+\usepackage{noweb}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage[paperheight=11in,paperwidth=8.5in]{geometry}
+\begin{document}
+
+
+\title{Assignment 2:Weaving through Entangled Webs in the Wood}
+\maketitle
+\begin{center}
+\textbf{2019MCS2574}
+\end{center}
+\begin{center}
+	\subsection*{Abstract}
+\end{center}
+\par In this document we explore the \textbf{Inorder Traversal} and \textbf{reconstruction of Binary tree}
+ from given Inorer traversal by adding mininum "cosmetic sugar" in the Inorder traversal to yield
+ the same tree.
+ \par As discussed in the document Rambling through Woods on a Sunny Morning, a binary tree can be recovered
+from it’s preorder (or postorder) traversal. Although the same approach can not be used to recover the tree
+from inorder traversal. The issue arises due to the difference in type of information that is abstracted by
+these traversals. Preorder (or postorder) traversal does not hide the parent-child relation viz. a parent node
+will always appear before a child node in preorder traversal (after in postorder traversal); although the parity
+(number of children) of the parent node is lost. However inorder traversal does not have any such guarantee.
+\newline
+
+\section*{Introduction}
+\par There are multiple ways to reconstruction of  binary tree.
+\begin{itemize}
+\item \textbf{Add levels of each node.} But this information is not feasible, because in worst case of skewed tree it would
+add level information as much as number of nodes in the tree. Hence for a large value of nodes it would make node size large.
+\item \textbf{Add child information for each node}, this method is even more space consuming as each node will need
+to store two information i.e its left and right child.
+\item Hence in the document we will try to minimize this information handling of each node, a.k.a  "cosmetic sugar".
+\end{itemize}
+
+
+
+\section{Binary Tree representation}
+\par We define a Binary Tree of form that is either Empty or is two child.
+A leaf node in  is actually a subtree which has two Empty subtrees. Internal nodes with out-degree 1 have to be
+ represented with the child being either a left-child or a right-child with the other child being Empty.
+<<Datatype>>=
+datatype 'a bintree =
+Empty |
+Node of 'a * 'a bintree * 'a bintree;
+@
+
+\subsection{Root}
+ \par We can retrieve root of our tree by runing a simple SML code described below.
+ Similarly we can find LST, RST, HEIGHT, ISLEAF etc. easily with this representation of
+ Binary tree.
+<<Root>>=
+fun root Empty = raise Empty_bintree
+| root (Node (x, _, _)) = x;
+@
+\section*{Initial thought process}
+\begin{itemize}
+	\item We need to focus on the constraint that we  need to minimize the "cosmetic sugar" in the node.
+	\item Instead of storing information such as height, levels, childs which are variable for each node.
+	we will try to add a constant value to each node.
+	\item We will use infix property that: infix expressions require “cosmetic sugar” such as parentheses,
+	associativity and precedence of operators to enable parsing of expressions unambiguously.
+\item Similarly we will try to add a BIT information to each node representing left or right association to a root node.
+\end{itemize}
+
+\section{Inorder Traversal and adding "cosmetic sugar".}
+\par For Inorder Traversal we will use Euler Tour and do some modification to add mininum
+extra information to make it compatible for reconstruction.
+\par We will check whether the child is left or right by a bit information where
+"SOME 0" represents left child and "SOME 1" represents right child. for this addtion of information
+ we will use two functions \textbf{add0, add1}.The functions are defined below.
+ \newline
+ \par We have taken help of Option datatype where we can use NONE to define Empty
+ and SOME (X) to define a value X.
+\subsection*{Add0 and Add1}
+
+<<Add0-Add1>>=
+            fun add0 (NONE,NONE)=(NONE,SOME (0))
+            |   add0 (NONE,SOME (0))=(NONE,SOME (0))
+            |   add0 (NONE,SOME (1))=(NONE,SOME (1))
+            |   add0 (SOME (x),NONE)=(SOME (x),SOME(0))
+            |   add0 (SOME (x),SOME(1))= (SOME (x),SOME(1))
+            |   add0 (SOME (x),SOME(0))= (SOME (x),SOME(0))
+            |   add0 (_,_) = (SOME 0, SOME 0)
+            fun add1 (NONE,NONE)=(NONE,SOME (1))
+            |   add1 (NONE,SOME (0))=(NONE,SOME (0))
+            |   add1 (NONE,SOME (1))=(NONE,SOME (1))
+            |   add1 (SOME (x),NONE)=(SOME (x),SOME(1))
+            |   add1 (SOME (x),SOME(1))= (SOME (x),SOME(1))
+            |   add1 (SOME (x),SOME(0))= (SOME (x),SOME(0))
+            |   add1 (_,_) = (SOME 0, SOME 0)
+@
+
+
+\subsection{Euler-tour}
+\par Here we use the above two defined functions and recursively add the BIT information
+to each node.
+\begin{itemize}
+	\item Root gets NONE.
+	\item Left child gets SOME 0.
+	\item Right child gets SOME 1.
+\end{itemize}
+
+<<EulerTour>>=
+fun 	eulerTour (Empty) = [(NONE,NONE)]
+|	eulerTour (Node (x, Empty, Empty)) =
+	( [(NONE,SOME (0)), (SOME (x),NONE), (NONE,SOME (1))]) (* leaf node *)
+|	eulerTour (Node (x, left, right)) = (* non-leaf node *)
+           let
+            val  inL = eulerTour left
+            val  inR = eulerTour right
+<<Add0-Add1>>
+            in
+              (((map add0) inL)@((SOME (x),NONE)::((map add1) inR)))
+            end;
+@
+
+\subsection{Inorder}
+\par We get modified preorder traversal with added information using above modified Euler Tour.
+<<inorder>>=
+fun inorder bt= eulerTour bt;
+@
+
+\section{Reconstructing the Binary Tree}
+\par Here we will try to focus on trying to retrive binary tree from single Inorder traversal using the
+\textbf{CII} which is a \textbf{Slice} of tree that represents a valid subtree as discussed in the document
+ \textbf{Rambling through Woods on a Sunny Morning}.
+\newline
+\subsection*{Algorithm}
+\begin{enumerate}
+	\item Find the indices of all NONE elements in I and express them as CIIs i.e. as ordered pairs of the form (i, i) where
+i, 0 ≤ i < n, is the index of a NONE element. Let this be list P I of ordered pairs representing Empty subtrees.
+Further let $\mid P I\mid$ be the number of CIIs in P I and$\|P I\|$= $$\sum_{(i,j)\in PI}{(j-i+1)}$$ represent
+ the number of elements from I that are in P I. Then n − $\|P I\|$ is the number of elements in I that are not present in P I.
+At the end of this step $\|P I\|$ = $\mid P I\mid$ and P I contains exactly the number of occurrences of NONE in I .
+\item \textbf{Recursively}
+\begin{enumerate}
+	\item Find all pairs of neighbours (i, j), (k, m) in P I with 0 $<$ i $\leq$ j $<$ k = j + 2 $\leq$ m $<$ n and Node(i,j)
+ is SOME (0) and Node(k,m) is SOME (1) in the list P I and $I_{j+1}$ $\neq$ NONE. This would require looking up I for the value at index j+1 to determine
+neighbourhood. Further if $I_{j+1}$ = NONE then I is not a valid Inorder traversal.
+
+\item Join neighbours (i, j), (k, m) to form the CII (i, m) in which both (i, j) and (k, m) are nested.
+In fact, the CII so formed is longer than the sum of the lengths of the CIIs (i, j) and (k, m), thus
+guaranteeing that$\mid P I\mid$ always decreases, but since $\|P I\|$ increases, the bound function n -$\|P I\|$
+decreases with every recursive call.
+\end{enumerate}
+\end{enumerate}
+\par \textbf{until}
+\begin{itemize}
+\item either P I reduces to a (list with a) single element (0, n−1), in which case I is indeed a valid Inorder
+traversal.
+\item or P I reduces to a list with more than one element and no neighbours, in which case I is an invalid
+Inorder traversal.
+\end{itemize}
+
+\subsection{Proof of correctness}
+\begin{itemize}
+	\item We have added BIT information in node to represent the paranthesis of INFIX notation as discussed in abstract.
+	\item We have resolved the issue of leaf and non-leaf node problem by removing those information and adding
+	paranthesis to each node.
+	\item This paranthesis satisfies the stack property as each pair paranthesis is linked to its left , root and right node.
+	hence our algorithm will always satisfy the reconstruction of binary tree.
+\end{itemize}
+
+
+
+\section{Binary Tree Reconstruction Code}
+\subsection{Inorder Inverse}
+\par This is code for reconstruction of Binary tree from modified Inorder Traversal.
+<<inorderInverse>>=
+fun 	inorderInverse []= raise InvalidInorderTraversal
+|	inorderInverse [(NONE,NONE)]= Empty
+|	inorderInverse [_,_]= raise InvalidInorderTraversal
+|	inorderInverse [(NONE,SOME 0),(SOME x,NONE),(NONE,SOME 1)]=
+					 Node(x,Empty,Empty)
+|	inorderInverse [_,_,_]= raise InvalidInorderTraversal
+|	inorderInverse Ibt= let
+
+val arP = Array.fromList(Ibt)
+val n = Array.length arP
+
+<<Root>>
+
+
+<<findEmpties>>
+
+
+<<areNeighbours>>
+
+
+<<joinNeighbours>>
+
+
+<<keepJoiningNeighbours>>
+
+
+<<eraseIndices>>
+
+
+in
+
+	eraseIndices(keepJoiningNeighbours(findEmpties(Ibt)))
+
+end;
+@
+
+\subsection{findEmpties}
+\par This creates a list NONEs which contains all NONE in I with their CII and BIT information.
+<<findEmpties>>=
+fun findEmpties PIT =
+	let fun	findNONEs ([], _, T) = T
+|		findNONEs (((NONE,SOME 0)::t), i, T) =
+		findNONEs (t, i+1, (Node (((i,i),(NONE),SOME 0),Empty,Empty))::T)
+| 		findNONEs (((NONE,SOME 1)::t), i, T) =
+		findNONEs (t, i+1, (Node (((i,i),(NONE),SOME 1),Empty,Empty))::T)
+| 		findNONEs (((SOME _,_)::t), i, T)= findNONEs (t, i+1, T)
+|		findNONEs (((_,_)::t), i, T)= findNONEs (t, i+1, T)
+	val NONEs = findNONEs (PIT, 0, [])
+	in
+	rev NONEs
+	end;
+@
+
+\subsection{areNeighbours}
+\par This Checks whether the given CIIs are valid neighbours .
+<<areNeighbours>>=
+exception Out_of_Range
+fun	areNeighbours((i,j), (k, m),LR0,LR1) =
+			let val inRange = (i >= 0) andalso (i < n) andalso
+			(j >= 0) andalso (j < n) andalso
+			(k >= 0) andalso (k < n) andalso
+			(m >= 0) andalso (m < n)
+			in if inRange
+			then if (i<=j) andalso (j<k) andalso (k<= m)
+			andalso (LR0=(SOME 0)) andalso  (LR1=(SOME 1))
+			then (case Array.sub (arP, j+1) of
+			(NONE,_) => false
+			| (SOME _,_) => (k=j+2) (* Inorder *)
+			)
+			else false
+			else raise Out_of_Range
+			end;
+@
+
+\subsection{joinNeighbours}
+\par This joins two CIIs to single CII if both are valid neighbours.
+<<joinNeighbours>>=
+fun	joinNeighbours[] = []
+|	joinNeighbours[bt] = [bt]
+|	joinNeighbours(bt0::(bt1::btList')) =
+	let val ((i,j), rootval0,LR0) = root bt0
+	val ((k,m), rootval1,LR1) = root bt1
+	in if areNeighbours((i,j), (k, m),LR0,LR1)
+	then let val cii = (i, m)
+		 val (rt,LR) = Array.sub (arP, j+1) (* Inorder *)
+	       	 val bt = Node ((cii, rt,LR), bt0, bt1)
+		 in bt::(joinNeighbours btList')
+		 end
+           else bt0::(joinNeighbours(bt1::btList'))
+        end;
+@
+
+
+
+\subsection{keepJoiningNeighbours}
+\par It recursively calls joinNeighbours untill single CII is left. Hence all Tree is constructed if it is
+valid Inorder Traversal.
+<<keepJoiningNeighbours>>=
+fun	keepJoiningNeighbours[] = raise InvalidInorderTraversal
+|	keepJoiningNeighbours[bt] = bt
+|	keepJoiningNeighbours btList =
+					let val btList1 = joinNeighbours btList
+					in keepJoiningNeighbours btList1
+					end;
+@
+
+\subsection{eraseIndices}
+\par Finally after the Tree is generated to will need to remove the extra information.
+and trim the tree to original tree with no extra information i.e "cosmetic sugar".
+<<eraseIndices>>=
+exception Unexpected_Empty_Node
+exception Unexpected_Node_Value
+fun	 eraseIndices Empty = raise Empty_bintree
+|	 eraseIndices (Node (((i:int, j:int), NONE,_), Empty, Empty)) =
+		if (i=j) then Empty else raise Unexpected_Empty_Node
+|	 eraseIndices (Node (((i:int, j:int), x,_), LST, RST)) =
+		let val left = eraseIndices LST
+		val right = eraseIndices RST
+		in ( case x of
+		NONE => raise Unexpected_Node_Value
+		| SOME y => Node (y, left, right)
+		   )
+		end;
+@
+
+\section{Module}
+\par Now with all the code chunks now will we make a Module merging into all into one chunk
+
+
+\subsection{Signature}
+\par This is the Signature to be incorporated into module
+<<Signature>>=
+signature BINTREE =
+sig
+	exception Empty_bintree
+	exception InvalidInorderTraversal
+	datatype 'a bintree = Empty | Node of 'a * 'a bintree * 'a bintree
+	val inorder  : int bintree -> (int option * int option) list
+	val inorderInverse  : ('a option * int option) list -> 'a bintree
+	val test0 : int bintree
+	val test1 : int bintree
+	val test2 : int bintree
+	val test3 : int bintree
+
+end; (*SIG ENDS*)
+@
+
+\subsection{exception}
+\par Here we define all the exceptions that we are going to raise is any invalid CASES and PATTERN are matched.
+<<Exception>>=
+exception Empty_bintree
+exception InvalidInorderTraversal
+@
+
+
+
+\subsection{TestCases}
+\par These are all kinds of test cases
+\begin{itemize}
+	\item Empty Tree
+	\item Skewed Tree
+	\item Complete tree
+	\item Unbalanced Tree
+\end{itemize}
+
+<<TestCases>>=
+val test0 = Empty
+val test1 = Node(1,Empty,Node(2,Empty,Node(3,Empty,Empty)))
+val test2 = Node(1000,Node(999,Node(997,Empty,Empty),Node(996,Empty,Empty)),Node(998,Node(995,Empty,Empty),Node(994,Empty,Empty)))
+val test3 = Node(1,Node (2,Empty,Node (4,Empty,Empty)),Node (3,Node (5,Empty,Empty),Node (6,Node (7,Empty,Empty),Empty)))
+
+@
+
+
+\subsection{COMPLETE MODULE}
+\par This is the Complete Module which is designed for the Binary Tree.
+<<2019MCS2574-Module-complete>>=
+<<Signature>>
+
+structure Bintree : BINTREE =
+struct
+
+<<Exception>>
+
+<<Datatype>>
+
+<<TestCases>>
+
+
+local
+<<EulerTour>>
+in
+
+<<inorder>>
+
+end
+
+<<inorderInverse>>
+end;
+open Bintree;
+@
+
+
+\end{document}
